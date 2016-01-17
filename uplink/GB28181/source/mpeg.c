@@ -527,14 +527,14 @@ static void rtp_stream_test(AVPacket * av_packet)
 	AVPacket *NextPacket = NULL;
 	int wlen=0;
 	int src_file;
-	//char start_code[4] = {0x00, 0x00, 0x00, 0x01};
+	char start_code[4] = {0x00, 0x00, 0x00, 0x01};
 
 	pTmpPacket = av_packet;
 	NextPacket = pTmpPacket->next;
 	while(pTmpPacket != NULL)
 	{
-		printf("\n%s Line %d:TIMKINGH is DEBUGGING!!! ====>DataSize:%d,BufOffset:%d,rtpOffset:%d\n\n",
-				__func__,__LINE__,pTmpPacket->DataSize,pTmpPacket->BufOffset,pTmpPacket->rtpOffset);
+		//printf("\n%s Line %d:TIMKINGH is DEBUGGING!!! ====>DataSize:%d,BufOffset:%d,rtpOffset:%d\n\n",
+				//__func__,__LINE__,pTmpPacket->DataSize,pTmpPacket->BufOffset,pTmpPacket->rtpOffset);
 		int length = pTmpPacket->DataSize - pTmpPacket->BufOffset;		
 
 		src_file = open("/var/tmp/rtp_stream_test.h264",O_RDWR | O_CREAT | O_APPEND);
@@ -542,11 +542,12 @@ static void rtp_stream_test(AVPacket * av_packet)
 		{
 			if(pTmpPacket->frame_type == 0 || pTmpPacket->frame_type == 1)
 			{
-				//wlen = write(src_file,start_code,4);
+				wlen = write(src_file,start_code,4);
+				printf("add start code!!!\n");
 			}
 			wlen = write(src_file,(char*)pTmpPacket + pTmpPacket->BufOffset,length);
-			printf("%s Line %d ====> wlen:%d,length:%d,frame_type:%d\n",__func__,__LINE__,
-											wlen,length,pTmpPacket->frame_type);
+			printf("%s Line %d ----> wlen:%d,length:%d,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
+											wlen,length,pTmpPacket->naluType,pTmpPacket->frame_type);
 		}
 		if(pTmpPacket->Extendnext == NULL)
 		{
@@ -601,6 +602,87 @@ static int GB_AVPacket_Free(AVPacket *head)
 }
 
 
+/*
+** 功能: 将SPS、PPS和SEI与I帧数据存储在一个AVPacket中
+*/
+static int GB_Merge_Frame()
+{
+	return 0;
+}
+
+
+/*
+** 功能: 解析NALU类型，跳过NALU起始码
+*/
+static int GB_Parse_NALU_Type(AVPacket* packet)
+{
+	int naluType,i = 0;
+	int datasize = 0;
+	unsigned char* beginData;
+	
+	if (packet == NULL) 
+	{
+		printf("%s Line %d: The Packet is NULL!!!\n",__func__,__LINE__);
+		return -1;
+	}
+	
+	beginData = (unsigned char *)packet + packet->BufOffset;	
+	datasize = packet->DataSize - packet->BufOffset;
+	
+	if(datasize > 20)
+	{
+		datasize = 16;
+	}
+	else if(datasize < 5)
+	{
+		datasize = 0;
+	}
+	else
+	{
+		datasize = datasize - 4;
+	}
+	
+	for(i=0;i < datasize;i++)
+	{
+		if(beginData[i] == 0 && beginData[i+1] == 0
+			&&beginData[i+2] == 0 && beginData[i+3] == 1)
+		{
+			break;
+		}
+	}
+
+	if(i == datasize)
+	{
+		printf("%s Line %d: It is a fragmented frame!!!  datasize:%d\n",__func__,__LINE__,datasize);
+		printf("0x%x,0x%x,0x%x,0x%x\n",beginData[0],beginData[1],beginData[2],beginData[3]);
+		naluType = 2; /*自定义，某个视频帧的分片*/
+	}
+	else
+	{
+		packet->BufOffset += i + 4; /*跳过NALU起始码*/
+		naluType = beginData[i+4] & 0x1f;
+
+		if(naluType == 0x01 || naluType == 0x09)
+		{
+			packet->frame_type = 0;
+		}
+		else if(naluType == 0x05 || naluType == 0x06 || naluType == 0x07
+			  	|| naluType == 0x08)
+		{
+			packet->frame_type = 1;
+		}
+		else
+		{			
+			printf("%s Line %d: GB_Parse_NALU_Type ERROR!!! naluType:%d\n",__func__,__LINE__,naluType);
+			return -1;
+		}
+	}
+
+	packet->naluType = naluType;
+
+	return 0;
+}
+
 
 /*
 ** 功能: 将ES流写到AVPacket中
@@ -612,7 +694,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	AVPacket * tempPacket = NULL;
 	unsigned int totalsize = 0;
 	int dataSizeNeedCopy = DataReadLen; /*dataSizeNeedCopy: 需要拷贝的字节长度*/
-	printf("%s Line %d --------> fPacketReadInProgress:%p\n",__func__,__LINE__,s->fPacketReadInProgress);
+	//printf("%s Line %d --------> fPacketReadInProgress:%p\n",__func__,__LINE__,s->fPacketReadInProgress);
 
 	if (bPacket == NULL) /*分配内存给bPacket*/
 	{		
@@ -648,6 +730,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			bPacket->DataSize = sizeof(AVPacket);
 			bPacket->data_len = 0;
 			bPacket->rtpOffset = sizeof(AVPacket);
+			bPacket->frame_type = 3; /*默认是NALU的分片*/
 			//bPacket->IMemSize = 0;
 			bPacket->isFirstPacket = FALSE;	
 			bPacket->Extendnext =NULL;
@@ -671,11 +754,11 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	/*将数据拷贝到AVPacket*/
 	if(bPacket->Extendnext == NULL)
 	{	
-		printf("%s Line %d --------> here\n",__func__,__LINE__);
+		//printf("%s Line %d --------> here\n",__func__,__LINE__);
 		if((dataSizeNeedCopy > totalsize - bPacket->DataSize) && (totalsize - bPacket->DataSize > 1))
 		{
-			printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-								dataSizeNeedCopy,totalsize - bPacket->DataSize);
+			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+								//dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			/*一个AVPacket的空间无法存储下所有的数据*/
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 							s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
@@ -687,8 +770,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		}
 		else if(dataSizeNeedCopy <= (totalsize - bPacket->DataSize))
 		{
-			printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-											dataSizeNeedCopy,totalsize - bPacket->DataSize);
+			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+										//	dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			/*一个AVPacket的空间可以存储下所有的数据*/
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
@@ -701,7 +784,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		
 		while(dataSizeNeedCopy > 0)  /*一个缓冲区没有存储下所有的数据，开辟扩展缓冲区*/
 		{
-			printf("%s Line %d --------> dataSizeNeedCopy:%d\n",__func__,__LINE__,dataSizeNeedCopy);
+			//printf("%s Line %d --------> dataSizeNeedCopy:%d\n",__func__,__LINE__,dataSizeNeedCopy);
 			if(bPacket->codec_id == CODEC_ID_H264)
 			{
 				tempPacket = (AVPacket * )SN_MPMalloc(gVideoPool, RTP_PACKET_SIZE);
@@ -718,11 +801,11 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 				tempPacket->BufRead = 0;
 				tempPacket->rtpOffset = 0;
 				tempPacket->isFirstPacket = FALSE;			
-				tempPacket->DataSize = sizeof(AVPacket);
+				tempPacket->DataSize = sizeof(AVPacket);			
+				tempPacket->frame_type = 3;
 				tempPacket->next = NULL;
 				tempPacket->Extendnext= NULL;
 				tempPacket->data_len = 0;
-				tempPacket->frame_type = -1;
 			}
 			else
 			{	
@@ -734,8 +817,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			
 			if(dataSizeNeedCopy >=  (totalsize - sizeof(AVPacket)))
 			{		
-				printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-												dataSizeNeedCopy,totalsize - sizeof(AVPacket));
+				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+						//						dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 								totalsize - sizeof(AVPacket));			
@@ -746,8 +829,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			}
 			else
 			{	
-				printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-												dataSizeNeedCopy,totalsize - sizeof(AVPacket));
+				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+						//						dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 									s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 										dataSizeNeedCopy);
@@ -763,7 +846,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	}
 	else if(bPacket->Extendnext != NULL)
 	{
-		printf("%s Line %d --------> here\n",__func__,__LINE__);
+		//printf("%s Line %d --------> here\n",__func__,__LINE__);
 		while(bPacket->Extendnext != NULL)
 		{				
 			bPacket = (AVPacket *)bPacket->Extendnext;
@@ -771,8 +854,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		
 		if((dataSizeNeedCopy > totalsize - bPacket->DataSize) && (totalsize - bPacket->DataSize > 1))
 		{
-			printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-											dataSizeNeedCopy,totalsize - bPacket->DataSize);
+			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+										//	dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 								totalsize - bPacket->DataSize);
@@ -783,8 +866,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		}
 		else if(dataSizeNeedCopy <= totalsize - bPacket->DataSize)
 		{
-			printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-											dataSizeNeedCopy,totalsize - bPacket->DataSize);
+			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+			//								dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 					s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 						dataSizeNeedCopy);
@@ -796,7 +879,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		
 		while(dataSizeNeedCopy > 0)
 		{
-			printf("%s Line %d --------> dataSizeNeedCopy:%d\n",__func__,__LINE__,dataSizeNeedCopy);
+			//printf("%s Line %d --------> dataSizeNeedCopy:%d\n",__func__,__LINE__,dataSizeNeedCopy);
 			if(bPacket->codec_id == CODEC_ID_H264)
 				tempPacket = (AVPacket * )SN_MPMalloc(gVideoPool, RTP_PACKET_SIZE);
 			else
@@ -811,10 +894,10 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 				tempPacket->rtpOffset = 0;
 				tempPacket->isFirstPacket = FALSE;			
 				tempPacket->DataSize = sizeof(AVPacket);
+				tempPacket->frame_type = 3;
 				tempPacket->next = NULL;
 				tempPacket->Extendnext= NULL;
 				tempPacket->data_len = 0;
-				tempPacket->frame_type = -1;
 			}
 			else
 			{	
@@ -826,8 +909,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			
 			if(dataSizeNeedCopy >=  (totalsize - sizeof(AVPacket)))
 			{		
-				printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-												dataSizeNeedCopy,totalsize - sizeof(AVPacket));
+				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+					//							dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 								totalsize - sizeof(AVPacket));			
@@ -838,8 +921,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			}
 			else
 			{	
-				printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-												dataSizeNeedCopy,totalsize - sizeof(AVPacket));
+				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
+				//								dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 									s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 										dataSizeNeedCopy);
@@ -859,8 +942,18 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	{
 		/*将AVPacket加入数据链表*/
 		if(s->fPacketReadInProgress)
-		{
-			rtp_stream_test(s->fPacketReadInProgress);
+		{			
+			/*解析Packet的帧类型，并将数据偏移指针指向ES流的第一个字节(跳过NALU起始码0x00 00 00 01)*/
+			GB_Parse_NALU_Type(s->fPacketReadInProgress);
+
+			if(s->fPacketReadInProgress->naluType == 0x09)
+			{
+				//GB_AVPacket_Free(s->fPacketReadInProgress);
+			}
+			else
+			{
+				rtp_stream_test(s->fPacketReadInProgress);
+			}
 			GB_AVPacket_Free(s->fPacketReadInProgress);
 		}
 		s->fPacketReadInProgress = NULL;
@@ -1067,7 +1160,7 @@ redo:
 	{
 		rlen = write(src_file,s->recv_buffer_ptr,DataReadLen);
 		//s->recv_buffer_ptr += DataReadLen;
-		printf("\n%s Line %d -----> DataReadLen:%d,rlen:%d\n",__func__,__LINE__,DataReadLen,rlen);
+		//printf("\n%s Line %d -----> DataReadLen:%d,rlen:%d\n",__func__,__LINE__,DataReadLen,rlen);
 	}
 	close(src_file);
 

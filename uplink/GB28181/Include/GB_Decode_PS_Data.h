@@ -895,6 +895,7 @@ struct SIP_Context
 	short isMissedPacket; /*0 - 未丢包; 1 - 发生丢包*/
 
 	AVPacket* fPacketReadInProgress; /*当前正在读取的数据包*/
+	AVPacket* fPacketSentToDecoder; /*传递给预览模块的数据包*/
 	short streamTypeBit; /* 0 - 视频 ; 1 - 音频*/
 	int code_id;
 
