@@ -27,7 +27,7 @@
 #include "rtpdec.h"
 
 #define MAX_NET_PAYLOAD_LENGTH 1400
-/*just for test*/
+/**/
 
 /*读取一个字节的数据*/
 int avio_r8(SIP_Context *s)
