@@ -328,20 +328,20 @@ redo:
 
     if (startcode == PACK_START_CODE) /*PS包头起始码*/
     {
-    	printf("%s Line %d:there exists PS header(0x000001ba)!\n",__func__,__LINE__);
+    	TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s Line %d:there exists PS header(0x000001ba)!\n",__func__,__LINE__);
         goto redo;
     }
 	
     if (startcode == SYSTEM_HEADER_START_CODE) /*PS系统头起始码*/
     {   	
-    	printf("%s Line %d:there exists PS system header(0x000001bb)!\n",__func__,__LINE__);
+    	TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s Line %d:there exists PS system header(0x000001bb)!\n",__func__,__LINE__);
         goto redo;
     }
 	
     if (startcode == PADDING_STREAM) /*填充*/
 	{
         //avio_skip(s->pb, avio_rb16(s->pb));      
-    	printf("%s Line %d:there exists padding bits!\n",__func__,__LINE__);
+    	TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s Line %d:there exists padding bits!\n",__func__,__LINE__);
 		s->recv_buffer_ptr += avio_rb16(s); /*跳过填充字节*/
         goto redo;
     }
@@ -349,12 +349,12 @@ redo:
     if (startcode == PRIVATE_STREAM_2) /*私有*/
     {
     	/*这里要如何处理???*/
-    	printf("%s Line %d:there exists private stream!\n",__func__,__LINE__);
+    	TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s Line %d:there exists private stream!\n",__func__,__LINE__);
     }
 	
     if (startcode == PROGRAM_STREAM_MAP) 
 	{	
-		printf("%s Line %d:there exists PS system map(0x000001bc)!\n",__func__,__LINE__);
+		TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s Line %d:there exists PS system map(0x000001bc)!\n",__func__,__LINE__);
         mpegps_psm_parse(m, s);
         goto redo;
     }
@@ -386,7 +386,6 @@ redo:
 		{
 	        if (len < 1)
 	        {
-	            //goto error_redo;
 				printf("Line %d:The PES's length is wrong!\n",__LINE__);
 				return -1;
 	        }
@@ -427,7 +426,6 @@ redo:
 			
 	        if (header_len > len)
 	        {
-	            //goto error_redo;
 				printf("Line %d:The PES's extension length is wrong!\n",__LINE__);
 				return -1;
 	        }
@@ -545,11 +543,11 @@ static void rtp_stream_testB(AVPacket * av_packet)
 			if(pTmpPacket->frame_type == 0 || pTmpPacket->frame_type == 1)
 			{
 				wlen = write(src_file,start_code,4);
-				printf("Line %d:add start code!!!\n",__LINE__);
+				//printf("Line %d:add start code!!!\n",__LINE__);
 			}
 			wlen = write(src_file,(char*)pTmpPacket + pTmpPacket->BufOffset,length);
-			printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
-											wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
+			//printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
+											//wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
 		}
 		if(pTmpPacket->Extendnext == NULL)
 		{
@@ -588,11 +586,11 @@ static void rtp_stream_testA(AVPacket * av_packet)
 			if(pTmpPacket->frame_type == 0 || pTmpPacket->frame_type == 1)
 			{
 				wlen = write(src_file,start_code,4);
-				printf("Line %d:add start code!!!\n",__LINE__);
+				//printf("Line %d:add start code!!!\n",__LINE__);
 			}
 			wlen = write(src_file,(char*)pTmpPacket + pTmpPacket->BufOffset,length);
-			printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
-											wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
+			//printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
+											//wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
 		}
 		if(pTmpPacket->Extendnext == NULL)
 		{
@@ -692,6 +690,10 @@ static int GB_AVPacket_Free(AVPacket *head)
 
 /*
 ** 功能: 解析NALU类型，跳过NALU起始码
+** 定义: naluType ---->  1 - P帧; 2 - 帧的分片; 5 - I帧;
+**                       6 - SEI帧;  7 - SPS帧; 8 - PPS帧
+**                       9 - 分界符
+** 返回: 0 - 成功; -1 - 失败
 */
 static int GB_Parse_NALU_Type(AVPacket* packet)
 {
@@ -732,8 +734,8 @@ static int GB_Parse_NALU_Type(AVPacket* packet)
 
 	if(i == datasize)
 	{
-		printf("%s Line %d: It is a fragmented frame!!!  datasize:%d\n",__func__,__LINE__,datasize);
-		printf("0x%x,0x%x,0x%x,0x%x\n",beginData[0],beginData[1],beginData[2],beginData[3]);
+		TRACE(SCI_TRACE_NORMAL, MOD_GB,"%s Line %d: It is a fragmented frame!!!  datasize:%d\n",__func__,__LINE__,datasize);
+		//printf("0x%x,0x%x,0x%x,0x%x\n",beginData[0],beginData[1],beginData[2],beginData[3]);
 		naluType = 2; /*自定义，某个视频帧的分片*/
 	}
 	else
@@ -758,14 +760,13 @@ static int GB_Parse_NALU_Type(AVPacket* packet)
 	}
 
 	packet->naluType = naluType;
-	printf("%s Line %d -------> packet:%p,naluType:%d\n",__func__,__LINE__,packet,packet->naluType);
 	return 0;
 }
 
 
 static int GB_Buffer_Write(AVPacket* packet)
 {
-	printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
+	//printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
 	AVPacket * tlist = packet;
 	AVPacket * dp= NULL;
 	AVPacket * ptem= NULL;
@@ -785,8 +786,6 @@ static int GB_Buffer_Write(AVPacket* packet)
 			dp = (AVPacket *)tlist->next;
 			if(tlist->frame_type == 0 || tlist->frame_type == 1)
 				size += 4;
-
-			printf("%s Line %d -----> pTmpPacket:%p,frame_type:%d\n",__func__,__LINE__,tlist,tlist->frame_type);
 			
 			while(tlist != NULL)
 			{
@@ -820,7 +819,7 @@ static int GB_Buffer_Write(AVPacket* packet)
 */
 static int GB_Add_Packet_Into_List(SIP_Context *s)
 {
-	printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
+	//printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
 	AVPacket * bPacket = s->fPacketSentToDecoder;
 	AVPacket * tempPacket = NULL;
 	int isExistIframeOrPframe = 0;
@@ -841,8 +840,6 @@ static int GB_Add_Packet_Into_List(SIP_Context *s)
 		tempPacket = bPacket;
 		while(tempPacket)
 		{
-			printf("%s Line %d ---------> tempPacket:%p naluType:%d!!!\n",__func__,__LINE__,
-												tempPacket,tempPacket->naluType);
 			if(tempPacket->naluType == 1 || tempPacket->naluType == 5)
 			{
 				isExistIframeOrPframe = 1;
@@ -854,6 +851,9 @@ static int GB_Add_Packet_Into_List(SIP_Context *s)
 		if(isExistIframeOrPframe && s->fPacketReadInProgress->naluType != 2)
 		{
 			printf("\n\n%s Line %d ---------> here!!!\n",__func__,__LINE__);
+			s->DataCount++;
+			s->fPacketSentToDecoder->seqno = s->DataCount;
+			
 			/*AVPacket中已存在I帧或者P帧,而且最近读取到的一帧不属于之前收到帧的分片*/
 			GB_Buffer_Write(s->fPacketSentToDecoder);
 			s->fPacketSentToDecoder = s->fPacketReadInProgress;
@@ -880,7 +880,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	AVPacket * tempPacket = NULL;
 	unsigned int totalsize = 0;
 	int dataSizeNeedCopy = DataReadLen; /*dataSizeNeedCopy: 需要拷贝的字节长度*/
-	//printf("%s Line %d --------> fPacketReadInProgress:%p\n",__func__,__LINE__,s->fPacketReadInProgress);
 
 	if (bPacket == NULL) /*分配内存给bPacket*/
 	{		
@@ -909,15 +908,12 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			s->fPacketReadInProgress = bPacket;
 		
 			/*初始化变量*/
-			//fHead =  sizeof(AVPacket);
-			//fBufOffset = sizeof(AVPacket);
 			bPacket->BufOffset = sizeof(AVPacket);
 			bPacket->BufRead = bPacket->BufOffset;
 			bPacket->DataSize = sizeof(AVPacket);
 			bPacket->data_len = 0;
 			bPacket->rtpOffset = sizeof(AVPacket);
 			bPacket->frame_type = 3; /*默认是NALU的分片*/
-			//bPacket->IMemSize = 0;
 			bPacket->isFirstPacket = FALSE;	
 			bPacket->Extendnext =NULL;
 		}
@@ -940,11 +936,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	/*将数据拷贝到AVPacket*/
 	if(bPacket->Extendnext == NULL)
 	{	
-		//printf("%s Line %d --------> here\n",__func__,__LINE__);
 		if((dataSizeNeedCopy > totalsize - bPacket->DataSize) && (totalsize - bPacket->DataSize > 1))
 		{
-			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-								//dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			/*一个AVPacket的空间无法存储下所有的数据*/
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 							s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
@@ -956,8 +949,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		}
 		else if(dataSizeNeedCopy <= (totalsize - bPacket->DataSize))
 		{
-			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-										//	dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			/*一个AVPacket的空间可以存储下所有的数据*/
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
@@ -970,7 +961,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		
 		while(dataSizeNeedCopy > 0)  /*一个缓冲区没有存储下所有的数据，开辟扩展缓冲区*/
 		{
-			//printf("%s Line %d --------> dataSizeNeedCopy:%d\n",__func__,__LINE__,dataSizeNeedCopy);
 			if(bPacket->codec_id == CODEC_ID_H264)
 			{
 				tempPacket = (AVPacket * )SN_MPMalloc(gVideoPool, RTP_PACKET_SIZE);
@@ -996,15 +986,12 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			else
 			{	
 				printf("%s Line %d: SN_MPMalloc ERROR!!!\n",__func__,__LINE__);
-				//packetReadWasIncomplete = True;
 				return 0;
 			}
 			tempPacket->codec_id = bPacket->codec_id;
 			
 			if(dataSizeNeedCopy >=  (totalsize - sizeof(AVPacket)))
 			{		
-				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-						//						dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 								totalsize - sizeof(AVPacket));			
@@ -1015,8 +1002,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			}
 			else
 			{	
-				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-						//						dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 									s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 										dataSizeNeedCopy);
@@ -1032,7 +1017,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 	}
 	else if(bPacket->Extendnext != NULL)
 	{
-		//printf("%s Line %d --------> here\n",__func__,__LINE__);
 		while(bPacket->Extendnext != NULL)
 		{				
 			bPacket = (AVPacket *)bPacket->Extendnext;
@@ -1040,8 +1024,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		
 		if((dataSizeNeedCopy > totalsize - bPacket->DataSize) && (totalsize - bPacket->DataSize > 1))
 		{
-			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-										//	dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 								totalsize - bPacket->DataSize);
@@ -1052,8 +1034,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		}
 		else if(dataSizeNeedCopy <= totalsize - bPacket->DataSize)
 		{
-			//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-			//								dataSizeNeedCopy,totalsize - bPacket->DataSize);
 			SN_MEMCPY((char *)bPacket + bPacket->DataSize, totalsize - bPacket->DataSize,
 					s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 						dataSizeNeedCopy);
@@ -1065,7 +1045,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		
 		while(dataSizeNeedCopy > 0)
 		{
-			//printf("%s Line %d --------> dataSizeNeedCopy:%d\n",__func__,__LINE__,dataSizeNeedCopy);
 			if(bPacket->codec_id == CODEC_ID_H264)
 				tempPacket = (AVPacket * )SN_MPMalloc(gVideoPool, RTP_PACKET_SIZE);
 			else
@@ -1088,15 +1067,12 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			else
 			{	
 				printf("%s Line %d: SN_MPMalloc ERROR!!!\n",__func__,__LINE__);
-				//packetReadWasIncomplete = True;
 				return 0;
 			}
 			tempPacket->codec_id = bPacket->codec_id;
 			
 			if(dataSizeNeedCopy >=  (totalsize - sizeof(AVPacket)))
 			{		
-				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-					//							dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 								s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 								totalsize - sizeof(AVPacket));			
@@ -1107,8 +1083,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			}
 			else
 			{	
-				//printf("%s Line %d --------> dataSizeNeedCopy:%d,remainLen:%d\n",__func__,__LINE__,
-				//								dataSizeNeedCopy,totalsize - sizeof(AVPacket));
 				SN_MEMCPY((char *)tempPacket + tempPacket->DataSize, totalsize - tempPacket->DataSize,
 									s->recv_buffer_ptr, s->recv_buffer_end - s->recv_buffer_ptr,
 										dataSizeNeedCopy);
@@ -1121,7 +1095,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			bPacket = tempPacket;
 		}
 	}
-	//readSuccess = True;
 
 	s->pes_bytes_have_read += DataReadLen;	
 	if(s->pes_bytes_have_read == s->pes_packet_length)
@@ -1165,14 +1138,11 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 int mpegps_read_packet(SIP_Context *s /*,AVPacket *pkt*/)
 {
     MpegDemuxContext *m = s->mpegDemuxContext;
-    //AVStream *st;
     int len = 0, startcode = 0, es_type;
-    int lpcm_header_len = -1; //Init to suppress warning
-    int request_probe= 0;
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     enum AVMediaType type;
     int64_t pts, dts, dummy_pos; // dummy_pos is needed for the index building to work
-    int src_file = 0,rlen = 0,DataReadLen = 0,RemainedLen = 0;
+    int /*src_file = 0,rlen = 0,*/DataReadLen = 0,RemainedLen = 0;
 
 redo:
 	/*开始读取一个PES包*/
@@ -1195,27 +1165,8 @@ redo:
 
 		/*PSM(节目流映射)中的编码类型*/
 	    es_type = m->psm_es_type[startcode & 0xff];
-	    if (es_type == STREAM_TYPE_VIDEO_MPEG1) 
-		{
-	        codec_id = AV_CODEC_ID_MPEG2VIDEO;
-	        type     = AVMEDIA_TYPE_VIDEO;
-	    } 
-		else if (es_type == STREAM_TYPE_VIDEO_MPEG2) 
-		{
-	        codec_id = AV_CODEC_ID_MPEG2VIDEO;
-	        type     = AVMEDIA_TYPE_VIDEO;
-	    } 
-		else if (es_type == STREAM_TYPE_AUDIO_MPEG1 || es_type == STREAM_TYPE_AUDIO_MPEG2) 
-	    {
-	        codec_id = AV_CODEC_ID_MP3;
-	        type     = AVMEDIA_TYPE_AUDIO;
-	    }
-		else if (es_type == STREAM_TYPE_AUDIO_AAC) 
-		{
-	        codec_id = AV_CODEC_ID_AAC;
-	        type     = AVMEDIA_TYPE_AUDIO;
-	    } 
-		else if (es_type == STREAM_TYPE_VIDEO_MPEG4) 
+
+		if (es_type == STREAM_TYPE_VIDEO_MPEG4) 
 	    {
 	        codec_id = AV_CODEC_ID_MPEG4;
 	        type     = AVMEDIA_TYPE_VIDEO;
@@ -1227,11 +1178,6 @@ redo:
 
 			s->streamTypeBit = 0;
 			s->code_id = CODEC_ID_H264;
-	    } 
-		else if (es_type == STREAM_TYPE_AUDIO_AC3) 
-		{
-	        codec_id = AV_CODEC_ID_AC3;
-	        type     = AVMEDIA_TYPE_AUDIO;
 	    } 
 		else if (m->imkh_cctv && es_type == 0x91) /*0x91: G.711.3音频格式 ; G.711的取值为0x90*/
 		{
@@ -1250,78 +1196,7 @@ redo:
 		else if (startcode >= 0x1e0 && startcode <= 0x1ef) 
 		{
 			/*H.265在这里体现????*/
-	    } 
-		else if (startcode == PRIVATE_STREAM_2) 
-		{
-	        type = AVMEDIA_TYPE_DATA;
-	        codec_id = AV_CODEC_ID_DVD_NAV;
-	    } 
-		else if (startcode >= 0x1c0 && startcode <= 0x1df) 
-		{
-			/*其他音频格式*/
-	        type     = AVMEDIA_TYPE_AUDIO;
-	        if (m->sofdec > 0) 
-			{
-	            codec_id = AV_CODEC_ID_ADPCM_ADX;
-	            // Auto-detect AC-3
-	            request_probe = 50;
-	        } 
-			else if (m->imkh_cctv && startcode == 0x1c0 && len > 80) 
-			{
-	            codec_id = AV_CODEC_ID_PCM_ALAW;
-	            request_probe = 50;
-	        } 
-			else 
-			{
-	            codec_id = AV_CODEC_ID_MP2;
-	            if (m->imkh_cctv)
-	                request_probe = 25;
-	        }
-	    } 
-		else if (startcode >= 0x80 && startcode <= 0x87) 
-		{
-	        type     = AVMEDIA_TYPE_AUDIO;
-	        codec_id = AV_CODEC_ID_AC3;
-	    } 
-		else if ((startcode >= 0x88 && startcode <= 0x8f) || (startcode >= 0x98 && startcode <= 0x9f)) 
-	    {
-	        /* 0x90 - 0x97 is reserved for SDDS in DVD specs */
-	        type     = AVMEDIA_TYPE_AUDIO;
-	        codec_id = AV_CODEC_ID_DTS;
-	    }
-		else if (startcode >= 0xa0 && startcode <= 0xaf)
-		{
-	        type     = AVMEDIA_TYPE_AUDIO;
-	        if (lpcm_header_len == 6) 
-			{
-	            codec_id = AV_CODEC_ID_MLP;
-	        } 
-			else 
-			{
-	            codec_id = AV_CODEC_ID_PCM_DVD;
-	        }
-	    }
-		else if (startcode >= 0xb0 && startcode <= 0xbf) 
-		{
-	        type     = AVMEDIA_TYPE_AUDIO;
-	        codec_id = AV_CODEC_ID_TRUEHD;
-	    } 
-		else if (startcode >= 0xc0 && startcode <= 0xcf) 
-		{
-	        /* Used for both AC-3 and E-AC-3 in EVOB files */
-	        type     = AVMEDIA_TYPE_AUDIO;
-	        codec_id = AV_CODEC_ID_AC3;
-	    } 
-		else if (startcode >= 0x20 && startcode <= 0x3f)
-		{
-	        type     = AVMEDIA_TYPE_SUBTITLE;
-	        codec_id = AV_CODEC_ID_DVD_SUBTITLE;
-	    } 
-		else if (startcode >= 0xfd55 && startcode <= 0xfd5f) 
-		{
-	        type     = AVMEDIA_TYPE_VIDEO;
-	        codec_id = AV_CODEC_ID_VC1;
-	    }
+	    } 		 
 	}
 
 	RemainedLen = s->recv_buffer_end - s->recv_buffer_ptr;
@@ -1342,16 +1217,17 @@ redo:
 		/*这个PES包完全包含于该RTP负载*/
 		DataReadLen = len;
 	}
-	
+
+	#if 0
     /*将数据拷贝到AVPacket*/
 	src_file = open("/var/tmp/es_stream_file.h264",O_RDWR | O_CREAT | O_APPEND);
 	if(src_file > 0)
 	{
 		rlen = write(src_file,s->recv_buffer_ptr,DataReadLen);
-		//s->recv_buffer_ptr += DataReadLen;
 		//printf("\n%s Line %d -----> DataReadLen:%d,rlen:%d\n",__func__,__LINE__,DataReadLen,rlen);
 	}
 	close(src_file);
+	#endif
 
 	/*调用函数接口,将ES流写到AVPacket*/
 	GB_Store_Packet(s,DataReadLen);
