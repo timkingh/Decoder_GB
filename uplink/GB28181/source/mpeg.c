@@ -19,15 +19,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-//#include "avformat.h"
-//#include "internal.h"
-//#include "mpeg.h"
-//#include "libavutil/avassert.h"
+
+/*global*/
+#include "global_def.h"
+#include "global_api.h"
+#include "global_msg.h"
+
 #include "GB_Decode_PS_Data.h"
 #include "rtpdec.h"
 
 #define MAX_NET_PAYLOAD_LENGTH 1400
-/*just for test*/
+
 
 /*读取一个字节的数据*/
 int avio_r8(SIP_Context *s)
@@ -521,6 +523,92 @@ redo:
 }
 
 
+static void rtp_stream_testB(AVPacket * av_packet)
+{
+	AVPacket *pTmpPacket = NULL;
+	AVPacket *NextPacket = NULL;
+	int wlen=0;
+	int src_file;
+	char start_code[4] = {0x00, 0x00, 0x00, 0x01};
+
+	pTmpPacket = av_packet;
+	NextPacket = pTmpPacket->next;
+	while(pTmpPacket != NULL)
+	{
+		//printf("\n%s Line %d:TIMKINGH is DEBUGGING!!! ====>DataSize:%d,BufOffset:%d,rtpOffset:%d\n\n",
+				//__func__,__LINE__,pTmpPacket->DataSize,pTmpPacket->BufOffset,pTmpPacket->rtpOffset);
+		int length = pTmpPacket->DataSize - pTmpPacket->BufOffset;		
+
+		src_file = open("/var/tmp/buffer_write_stream_test.h264",O_RDWR | O_CREAT | O_APPEND);
+		if(src_file > 0)
+		{
+			if(pTmpPacket->frame_type == 0 || pTmpPacket->frame_type == 1)
+			{
+				wlen = write(src_file,start_code,4);
+				printf("Line %d:add start code!!!\n",__LINE__);
+			}
+			wlen = write(src_file,(char*)pTmpPacket + pTmpPacket->BufOffset,length);
+			printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
+											wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
+		}
+		if(pTmpPacket->Extendnext == NULL)
+		{
+			pTmpPacket = (AVPacket *)NextPacket;
+			if(pTmpPacket != NULL)
+				NextPacket = pTmpPacket->next;
+		}
+		else
+		{
+			pTmpPacket = (AVPacket *)(pTmpPacket->Extendnext);
+		}				
+	}
+	close(src_file);
+}
+
+
+static void rtp_stream_testA(AVPacket * av_packet)
+{
+	AVPacket *pTmpPacket = NULL;
+	AVPacket *NextPacket = NULL;
+	int wlen=0;
+	int src_file;
+	char start_code[4] = {0x00, 0x00, 0x00, 0x01};
+
+	pTmpPacket = av_packet;
+	NextPacket = pTmpPacket->next;
+	while(pTmpPacket != NULL)
+	{
+		//printf("\n%s Line %d:TIMKINGH is DEBUGGING!!! ====>DataSize:%d,BufOffset:%d,rtpOffset:%d\n\n",
+				//__func__,__LINE__,pTmpPacket->DataSize,pTmpPacket->BufOffset,pTmpPacket->rtpOffset);
+		int length = pTmpPacket->DataSize - pTmpPacket->BufOffset;		
+
+		src_file = open("/var/tmp/preview_stream_test.h264",O_RDWR | O_CREAT | O_APPEND);
+		if(src_file > 0)
+		{
+			if(pTmpPacket->frame_type == 0 || pTmpPacket->frame_type == 1)
+			{
+				wlen = write(src_file,start_code,4);
+				printf("Line %d:add start code!!!\n",__LINE__);
+			}
+			wlen = write(src_file,(char*)pTmpPacket + pTmpPacket->BufOffset,length);
+			printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
+											wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
+		}
+		if(pTmpPacket->Extendnext == NULL)
+		{
+			pTmpPacket = (AVPacket *)NextPacket;
+			if(pTmpPacket != NULL)
+				NextPacket = pTmpPacket->next;
+		}
+		else
+		{
+			pTmpPacket = (AVPacket *)(pTmpPacket->Extendnext);
+		}				
+	}
+	close(src_file);
+}
+
+
 static void rtp_stream_test(AVPacket * av_packet)
 {
 	AVPacket *pTmpPacket = NULL;
@@ -543,11 +631,11 @@ static void rtp_stream_test(AVPacket * av_packet)
 			if(pTmpPacket->frame_type == 0 || pTmpPacket->frame_type == 1)
 			{
 				wlen = write(src_file,start_code,4);
-				printf("add start code!!!\n");
+				//printf("Line %d:add start code!!!\n",__LINE__);
 			}
 			wlen = write(src_file,(char*)pTmpPacket + pTmpPacket->BufOffset,length);
-			printf("%s Line %d ----> wlen:%d,length:%d,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
-											wlen,length,pTmpPacket->naluType,pTmpPacket->frame_type);
+			//printf("%s Line %d ----> wlen:%d,pTmpPacket:%p,nalu_type:%d,frame_type:%d\n",__func__,__LINE__,
+											//wlen,pTmpPacket,pTmpPacket->naluType,pTmpPacket->frame_type);
 		}
 		if(pTmpPacket->Extendnext == NULL)
 		{
@@ -598,15 +686,6 @@ static int GB_AVPacket_Free(AVPacket *head)
 		}
 	}
 	
-	return 0;
-}
-
-
-/*
-** 功能: 将SPS、PPS和SEI与I帧数据存储在一个AVPacket中
-*/
-static int GB_Merge_Frame()
-{
 	return 0;
 }
 
@@ -679,9 +758,116 @@ static int GB_Parse_NALU_Type(AVPacket* packet)
 	}
 
 	packet->naluType = naluType;
+	printf("%s Line %d -------> packet:%p,naluType:%d\n",__func__,__LINE__,packet,packet->naluType);
+	return 0;
+}
+
+
+static int GB_Buffer_Write(AVPacket* packet)
+{
+	printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
+	AVPacket * tlist = packet;
+	AVPacket * dp= NULL;
+	AVPacket * ptem= NULL;
+	unsigned int size = 0;
+	int ret = -1;
+	
+	if(packet == NULL)
+	{		
+		printf("%s Line %d: packet is NULL!!!\n",__func__,__LINE__);
+		return -1;
+	}
+
+	if(packet->codec_id == CODEC_ID_H264)
+	{		
+		while(tlist != NULL)
+		{
+			dp = (AVPacket *)tlist->next;
+			if(tlist->frame_type == 0 || tlist->frame_type == 1)
+				size += 4;
+
+			printf("%s Line %d -----> pTmpPacket:%p,frame_type:%d\n",__func__,__LINE__,tlist,tlist->frame_type);
+			
+			while(tlist != NULL)
+			{
+				ptem = (AVPacket *)tlist->Extendnext;
+				size += tlist->DataSize - tlist->BufOffset;
+				tlist = ptem;
+			}
+			tlist = dp;
+		}					
+		
+		packet->data_len = size;
+	}
+
+	rtp_stream_testA(packet);
+	
+	ret = BufferWrite(0, (char*)packet, packet->data_len + sizeof(AVPacket));
+	if(ret < 0)
+	{
+		printf("%s Line %d: BufferWrite ERROR!!!\n",__func__,__LINE__);
+		return -1;		
+	}	
+	rtp_stream_testB(packet);
+	
+	return 0;
+}
+
+
+/*
+** 功能: 将AVPacket写入数据链表中
+** 参数:
+*/
+static int GB_Add_Packet_Into_List(SIP_Context *s)
+{
+	printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
+	AVPacket * bPacket = s->fPacketSentToDecoder;
+	AVPacket * tempPacket = NULL;
+	int isExistIframeOrPframe = 0;
+
+	if(s->fPacketReadInProgress == NULL)
+	{
+		printf("%s Line %d: fPacketReadInProgress is NULL!!!\n",__func__,__LINE__);
+		return -1;
+	}
+
+	if(bPacket == NULL)
+	{
+		printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
+		s->fPacketSentToDecoder = s->fPacketReadInProgress;
+	}
+	else
+	{
+		tempPacket = bPacket;
+		while(tempPacket)
+		{
+			printf("%s Line %d ---------> tempPacket:%p naluType:%d!!!\n",__func__,__LINE__,
+												tempPacket,tempPacket->naluType);
+			if(tempPacket->naluType == 1 || tempPacket->naluType == 5)
+			{
+				isExistIframeOrPframe = 1;
+			}
+			bPacket = tempPacket;
+			tempPacket = bPacket->next;
+		}
+
+		if(isExistIframeOrPframe && s->fPacketReadInProgress->naluType != 2)
+		{
+			printf("\n\n%s Line %d ---------> here!!!\n",__func__,__LINE__);
+			/*AVPacket中已存在I帧或者P帧,而且最近读取到的一帧不属于之前收到帧的分片*/
+			GB_Buffer_Write(s->fPacketSentToDecoder);
+			s->fPacketSentToDecoder = s->fPacketReadInProgress;
+		}
+		else
+		{
+			/*将最近读取的数据帧挂到fPacketSentToDecoder链表后面*/
+			bPacket->next = s->fPacketReadInProgress;
+		}
+	}
 
 	return 0;
 }
+
 
 
 /*
@@ -948,13 +1134,16 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 
 			if(s->fPacketReadInProgress->naluType == 0x09)
 			{
-				//GB_AVPacket_Free(s->fPacketReadInProgress);
+				GB_AVPacket_Free(s->fPacketReadInProgress);
 			}
 			else
 			{
 				rtp_stream_test(s->fPacketReadInProgress);
+
+				/*根据NALU类型决定是否将数据写入数据链表*/				
+				GB_Add_Packet_Into_List(s);
 			}
-			GB_AVPacket_Free(s->fPacketReadInProgress);
+			//GB_AVPacket_Free(s->fPacketReadInProgress);						
 		}
 		s->fPacketReadInProgress = NULL;
 		

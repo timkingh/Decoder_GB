@@ -259,7 +259,7 @@ static int GB_Recv_Rtp_Data(SIP_Context * c)
 	}
 	c->recv_buffer_end = c->recv_buffer + len; 
 
-	if(tmpLen < 5*1024*1024)
+	if(tmpLen < 1*1024*1024)
 	{		
 		if(AV_RB16(c->recv_buffer + 2) > tmpSeq + 1)
 		{
