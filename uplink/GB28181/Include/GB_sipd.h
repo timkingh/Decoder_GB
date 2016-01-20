@@ -53,10 +53,16 @@ enum {
 #define GB_TOTAL_CHN 	(DEV_DEC_TOTALVOCHN)
 #define GB_SENDLIST_NUM_LIMIT 	(5)
 #define GB_TOTAL_MONITOR_NUM 	(MAXVGANUM)
+#define LISTEN_PORT 61000
 
+typedef struct 
+{
+	struct pollfd *poll_entry;
+	int server_fd;
+	int client_fd;
+}GBMsgSock;
 
-//MSGSock gb_msgsock;
-
+GBMsgSock gb_msg_sock;
 
 
 typedef struct

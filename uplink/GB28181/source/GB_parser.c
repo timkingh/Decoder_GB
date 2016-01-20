@@ -617,22 +617,20 @@ int GB_handle_RCV_REQINVITE(GB_CONNECT_STATE *gb_cons, osip_event_t * osip_event
 			media_session.media_session_opt = MEDIA_SESSION_OPT_INVITE;
 			SN_STRCPY(media_session.TagID,sizeof(media_session.TagID),tag->gvalue);
 						
-//			write(gb_msgsock.client_fd, (void *)&media_session, sizeof(media_session));
+			write(gb_msg_sock.client_fd, (void *)&media_session, sizeof(media_session));
 
-//			ret = gb_sdp_process(chn-1,mbody->body, &sdpInfo, sdpStr_response);
-			/*响应给SIP服务器(调测软件)的SDP*/
 			snprintf(sdpStr_response,1024,
 			"v=0\r\n"\
 			"o=34020000001330000001 0 0 IN IP4 %s\r\n"\
 			"s=Play\r\n"\
 			"c=IN IP4 %s\r\n"\
 			"t=0 0\r\n"\
-			"m=video 61000 RTP/AVP 96\r\n"\
+			"m=video %d RTP/AVP 96\r\n"\
 			"a=recvonly\r\n"\
 			"a=rtpmap:96 PS/90000\r\n"\
 			"y=0100000001\r\n"\
 			"f=\r\n",
-			GB_Get_LocalIP(), GB_Get_LocalIP());
+			GB_Get_LocalIP(), GB_Get_LocalIP(),LISTEN_PORT);
 
 			ret = 0;
 			if(ret == 0)
@@ -714,7 +712,7 @@ int GB_handle_RCV_REQACK(GB_CONNECT_STATE *gb_cons, osip_event_t * osip_event)
 			media_session.media_session_opt = MEDIA_SESSION_OPT_ACK;
 			SN_STRCPY(media_session.TagID,sizeof(media_session.TagID),tag->gvalue);
 
-//			write(gb_msgsock.client_fd, (void *)&media_session, sizeof(media_session));			
+			write(gb_msg_sock.client_fd, (void *)&media_session, sizeof(media_session));			
 		}
 	}
 	return 0;
@@ -811,7 +809,7 @@ int GB_handle_RCV_REQUEST(GB_CONNECT_STATE *gb_cons, osip_event_t * osip_event)
 				media_session.media_session_opt = MEDIA_SESSION_OPT_BYE;
 				SN_STRCPY(media_session.TagID,sizeof(media_session.TagID),tag->gvalue);
 
-//				write(gb_msgsock.client_fd, (void *)&media_session, sizeof(media_session));				
+				write(gb_msg_sock.client_fd, (void *)&media_session, sizeof(media_session));				
 			}
 		}
 

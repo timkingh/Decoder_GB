@@ -39,8 +39,6 @@ int DeviceID2LocalChn(char *deviceID, int *localchn)
 	}
 	else
 	{
-		*localchn = 1;
-		return 0;
 		for(chn=1; chn<=GB_TOTAL_MONITOR_NUM; chn++)
 		{
 			SN_MEMSET(&monitor_cfg,0,sizeof(monitor_cfg));
@@ -251,16 +249,14 @@ int GB_Deal_Query_Catalog(GB_CONNECT_STATE *gb_cons, osip_event_t * osip_event, 
 			for(i=0; i<GB_TOTAL_MONITOR_NUM; i++)
 			{
 				SN_MEMSET(&monitor_cfg,0,sizeof(monitor_cfg));
-			#if 0
+			
 				if(GetParameter (PRM_ID_GB_SIPD_MONITOR_CFG, NULL, &monitor_cfg, sizeof(PRM_GB_SIPD_MONITOR_CFG), 
 						i+1, SUPER_USER_ID, NULL) != PARAM_OK)
 				{
 					printf("%s line=%d  GetParameter PRM_ID_GB_SIPD_MONITOR_CFG err\n",__FUNCTION__, __LINE__);
 					continue;
 				}
-			#else
-				SN_STRCPY((char *)monitor_cfg.MonitorID,sizeof(monitor_cfg.MonitorID),"34020000001330000001");
-			#endif
+
 				if(SN_STRLEN((char *)monitor_cfg.MonitorID) <= 0)
 				{
 					continue;

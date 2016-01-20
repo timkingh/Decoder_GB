@@ -807,7 +807,7 @@ static int GB_Buffer_Write(AVPacket* packet)
 		printf("%s Line %d: BufferWrite ERROR!!!\n",__func__,__LINE__);
 		return -1;		
 	}	
-	rtp_stream_testB(packet);
+	//rtp_stream_testB(packet);
 	
 	return 0;
 }
@@ -850,7 +850,7 @@ static int GB_Add_Packet_Into_List(SIP_Context *s)
 
 		if(isExistIframeOrPframe && s->fPacketReadInProgress->naluType != 2)
 		{
-			printf("\n\n%s Line %d ---------> here!!!\n",__func__,__LINE__);
+			//printf("\n\n%s Line %d ---------> here!!!\n",__func__,__LINE__);
 			s->DataCount++;
 			s->fPacketSentToDecoder->seqno = s->DataCount;
 			
@@ -1111,7 +1111,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			}
 			else
 			{
-				rtp_stream_test(s->fPacketReadInProgress);
+				//rtp_stream_test(s->fPacketReadInProgress);
 
 				/*根据NALU类型决定是否将数据写入数据链表*/				
 				GB_Add_Packet_Into_List(s);
@@ -1120,7 +1120,7 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 		}
 		s->fPacketReadInProgress = NULL;
 		
-		printf("%s Line %d: have read a complete PES packet(%d Bytes)!\n",
+		printf("%s Line %d: have read a complete PES packet(%d Bytes)!\n\n",
 										__func__,__LINE__,s->pes_bytes_have_read);
 		s->pes_bytes_have_read = 0;
 	}

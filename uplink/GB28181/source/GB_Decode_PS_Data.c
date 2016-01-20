@@ -32,7 +32,6 @@
 #include "rtpdec.h"
 
 #define MAX_DECODE_CLIENT_NUM   1   /*3536可以两个显示器输出*/
-#define LISTEN_PORT 61000
 #define SIPD_VIDEO_PLAY					("Play")
 #define SIPD_VIDEO_PLAYBACK				("Playback")
 #define SIPD_VIDEO_DOWNLOAD					("Download")
@@ -55,7 +54,6 @@
 
 static SIP_Context *g_sipClient[MAX_DECODE_CLIENT_NUM];
 //static char pes_recv_buf[RECVBUF_SIZE];
-GBMsgSock gb_msg_sock;
 
 
 
@@ -294,7 +292,19 @@ void GB_Handle_Local_Msg(void)
 
 			if(media_session->media_session_opt == MEDIA_SESSION_OPT_INVITE)
 			{
+				SCM_Link_Rsp addrsp;	  	
+		  		addrsp.endtype = LINK_ALL_SUCCESS;
+				addrsp.mode = 1/*modeNum*/;  /*暂时写为1*/							
+
+				/*单画面主码流预览: channel==RTSP_C_MAX_Q_NUM*/
+				addrsp.channel = RTSP_C_MAX_Q_NUM;
+		  		SN_SendMessageEx(SUPER_USER_ID, MOD_GB, MOD_FWK, 0, 0, MSG_ID_NTRANS_ADDUSER_RSP,
+														&addrsp, sizeof(SCM_Link_Rsp));
+
 				g_sipClient[chn]->state = GB_RTSP_PLAYING;
+
+				printf("%s Line %d -------> channel:%d, MSG_ID_NTRANS_ADDUSER_RSP has been sent!\n",
+												__func__,__LINE__,addrsp.channel);
 			}
 			else if(media_session->media_session_opt == MEDIA_SESSION_OPT_BYE)
 			{
@@ -382,7 +392,7 @@ void* GB_DecodePSData(void *Param)
 
 		for(idx = 0;idx < MAX_DECODE_CLIENT_NUM;idx++)
 		{
-			if(1/*g_sipClient[idx]->state == GB_RTSP_PLAYING*/)  /*暂时没有信令交互*/
+			if(g_sipClient[idx]->state == GB_RTSP_PLAYING)  /*暂时没有信令交互*/
 			{
 				poll_entry->fd = g_sipClient[idx]->sip_video_fd;	
 				g_sipClient[idx]->poll_entry = poll_entry;

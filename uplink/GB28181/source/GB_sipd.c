@@ -26,10 +26,6 @@ pthread_mutex_t gGBConnStatusLock;
 static int gb_ipchange = 0;
 static long long gb_ipchange_time = 0;
 
-static int gGBMode = 0; // 1-GB模式
-PRM_Decode Decode_backup;
-PRM_PasDecodeInfo PasDecodeInfo_backup;
-
 
 
 extern GB_Record_Node * GB_Find_Record_Node_by_cmdType(GB_CONNECT_STATE *gb_cons, int cmdType, int idx, int *index);
@@ -141,31 +137,38 @@ char *GB_Get_LocalIP()
 
 int GB_Refresh_GBCfg()
 {	
-	SN_MEMSET(&gGBCfg,0,sizeof(gGBCfg));
+	PRM_GB_SIPD_DEVMODE_CFG DevMode;
+
+	SN_MEMSET(&DevMode,0,sizeof(DevMode));
 
 	pthread_mutex_lock(&gGBCfgLock);
-#if 0
+
+	SN_MEMSET(&gGBCfg,0,sizeof(gGBCfg));
 	if(GetParameter (PRM_ID_GB_SIPD_CFG, NULL, &gGBCfg, sizeof(PRM_GB_SIPD_CFG), 1, 
 			SUPER_USER_ID, NULL) != PARAM_OK)
 	{
 		printf("%s line=%d PRM_ID_GB_SIPD_CFG GetParameter err\n",__FUNCTION__, __LINE__);
+		pthread_mutex_unlock(&gGBCfgLock);
 		return -1;
 	}
-#else
-	gGBCfg.enable = 1;
-	SN_STRCPY((char *)gGBCfg.deviceID,sizeof(gGBCfg.deviceID),"34020000001140000003");
-	SN_STRCPY((char *)gGBCfg.reg_pwd,sizeof(gGBCfg.reg_pwd),"12345678");
-	SN_STRCPY((char *)gGBCfg.sipserver_ID,sizeof(gGBCfg.sipserver_ID),"34020000002000000001");
-	gGBCfg.sipserver_ip[0] = 192;
-	gGBCfg.sipserver_ip[1] = 168;
-	gGBCfg.sipserver_ip[2] = 6;
-	gGBCfg.sipserver_ip[3] = 133;
-	gGBCfg.sipserver_port = 5060;
-	gGBCfg.keepalive_interval = 60;
-	gGBCfg.keepalive_timeout_cnt = 3;
-	gGBCfg.register_period = 3600;
-	gGBCfg.local_port = 5060;
-#endif
+
+	if(GetParameter (PRM_ID_GB_SIPD_DEVMODE_CFG, NULL, &DevMode, sizeof(PRM_GB_SIPD_DEVMODE_CFG), 1, 
+			SUPER_USER_ID, NULL) != PARAM_OK)
+	{
+		printf("%s line=%d PRM_ID_GB_SIPD_DEVMODE_CFG GetParameter err\n",__FUNCTION__, __LINE__);
+		pthread_mutex_unlock(&gGBCfgLock);
+		return -1;
+	}
+
+	if(DevMode.DevMode == DEV_MODE_GB)
+	{
+		gGBCfg.enable = 1;
+	}
+	else
+	{
+		gGBCfg.enable = 0;
+	}
+	
 	pthread_mutex_unlock(&gGBCfgLock);
 
 	return 0;
@@ -337,47 +340,147 @@ int GB_Send_KeepAlive(GB_CONNECT_STATE *gb_cons)
 
 int GB_Change_Mode(int Flag)
 {
-	PRM_Decode decodemode;
-	PRM_PasDecodeInfo PasDecodeInfo;
+	PRM_SwitchChnInfo stNewSwitchChnInfo;
+	int chn;
+	PRM_Decode DecordeMode;
+	PRM_POLLSCH_PLAN pollsch_plan;
+	PRM_PREVIEW_CFG_EX preview_cfg;
+	Layout_crtl_Req LayoutReq;
+	PRM_GB_SIPD_DEVMODE_CFG DevModeCfg;
+
+
+	SN_MEMSET(&DecordeMode, 0, sizeof(DecordeMode));
+	SN_MEMSET(&pollsch_plan, 0, sizeof(pollsch_plan));
+	SN_MEMSET(&preview_cfg, 0, sizeof(preview_cfg));	
+	SN_MEMSET(&LayoutReq,0,sizeof(LayoutReq));
+	SN_MEMSET(&DevModeCfg,0,sizeof(DevModeCfg));
 	
-	SN_MEMSET(&decodemode,0,sizeof(decodemode));
-	SN_MEMSET(&PasDecodeInfo,0,sizeof(PasDecodeInfo));
-	
-	if(Flag == 1 && gGBMode != 1)
+
+		if (ERROR == GetParameter(PRM_ID_DECODEMODE_CFG, NULL, &DecordeMode, sizeof(PRM_Decode), 1, 
+			SUPER_USER_ID, NULL))
+		{
+			printf("%s line=%d GetParameter PRM_ID_DECODEMODE_CFG err\n", __FUNCTION__, __LINE__);
+			return -1;
+		}
+
+		if (ERROR == GetParameter(PRM_ID_GB_SIPD_DEVMODE_CFG, NULL, &DevModeCfg, sizeof(PRM_GB_SIPD_DEVMODE_CFG), 1, 
+			SUPER_USER_ID, NULL))
+		{
+			printf("%s line=%d GetParameter PRM_ID_GB_SIPD_DEVMODE_CFG err\n", __FUNCTION__, __LINE__);
+			return -1;
+		}
+	if(Flag == 1)
 	{
 		printf("Enter GB28181 Mode\n");
-		gGBMode = 1;
+		if(DecordeMode.DecodeMode == SwitchDecode) // 主动解码
+		{
+			// 断开通道连接
+			for(chn = 0; chn < GB_TOTAL_CHN; chn++)
+			{
+				SN_MEMSET(&stNewSwitchChnInfo, 0, sizeof(stNewSwitchChnInfo));
+				
+				if (ERROR == GetParameter(PRM_ID_SWITCHCHN_CFG, NULL, 
+					&stNewSwitchChnInfo, sizeof(PRM_SwitchChnInfo), chn+1, 
+					SUPER_USER_ID, NULL))
+				{
+					printf("%s line=%d GetParameter err\n", __FUNCTION__, __LINE__);
+					continue;
+				}
+			
+				if(stNewSwitchChnInfo.Enable == 1)
+				{
+					DevModeCfg.ChnEnable[chn] = 1;
+					stNewSwitchChnInfo.Enable = 0;
+					GB_UpdateParam(PRM_ID_SWITCHCHN_CFG,&stNewSwitchChnInfo,sizeof(stNewSwitchChnInfo),chn+1);
+				}
+			}
+
+
+			//  单画面显示
+			if (ERROR == GetParameter(PRM_ID_POLLSCH_PLAN, NULL, &pollsch_plan, sizeof(PRM_POLLSCH_PLAN), 1, 
+				SUPER_USER_ID, NULL))
+			{
+				printf("%s line=%d GetParameter PRM_ID_POLLSCH_PLAN err\n", __FUNCTION__, __LINE__);
+				return -1;
+			}
+
+			if(pollsch_plan.EnablePollPlan == 1)  //  多画面轮巡
+			{
+				DevModeCfg.PollPlan = 1;
+				pollsch_plan.EnablePollPlan = 0; //  关闭多画面轮巡计划
+				GB_UpdateParam(PRM_ID_POLLSCH_PLAN,&pollsch_plan,sizeof(pollsch_plan),1);
+			}
+
+			LayoutReq.mode = SingleScene;
+			SendMessageEx(SUPER_USER_ID, MOD_GB, MOD_SCM, 0, 0, MSG_ID_PRV_LAYOUT_CTRL_REQ, &LayoutReq, sizeof(Layout_crtl_Req));
+		}
+		else if(DecordeMode.DecodeMode == PassiveDecode) // 被动解码
+		{
+			int layout_mode;
+
+			//  断开通道连接
+
+			
+			layout_mode = 1; // 被动解码下的单画面;
+			SendMessageEx (SUPER_USER_ID, MOD_GB, MOD_SCM, 0, 0, MSG_ID_SCM_PAS_LAYOUT_IND, &layout_mode, sizeof(layout_mode));
+		}
+		else
+		{
+			
+		}
 		
-		SN_MEMSET(&Decode_backup,0,sizeof(Decode_backup));
-		SN_MEMSET(&PasDecodeInfo_backup,0,sizeof(PasDecodeInfo_backup));
-		if(GetParameter (PRM_ID_DECODEMODE_CFG, NULL, &Decode_backup, sizeof(PRM_Decode), 1, 
-				SUPER_USER_ID, NULL) != PARAM_OK)
-		{
-			printf("%s line=%d PRM_ID_DECODEMODE_CFG GetParameter err\n",__FUNCTION__, __LINE__);
-			return -1;
-		}
-		if(GetParameter (PRM_ID_PASSIVECHN_CFG, NULL, &PasDecodeInfo_backup, sizeof(PRM_PasDecodeInfo), 1, 
-				SUPER_USER_ID, NULL) != PARAM_OK)
-		{
-			printf("%s line=%d PRM_ID_PASSIVECHN_CFG GetParameter err\n",__FUNCTION__, __LINE__);
-			return -1;
-		}
-
-		decodemode.DecodeMode = PassiveDecode;
-
-		GB_UpdateParam(PRM_ID_DECODEMODE_CFG,&decodemode,sizeof(decodemode),1);
-		GB_UpdateParam(PRM_ID_PASSIVECHN_CFG,&PasDecodeInfo,sizeof(PasDecodeInfo),1);
 	}
-	
-	if(Flag == 0 && gGBMode == 1)
+	if(Flag == 0)
 	{
-		printf("Exit GB28181 Mode\n");
-		gGBMode=0;
 
-		GB_UpdateParam(PRM_ID_DECODEMODE_CFG,&Decode_backup,sizeof(Decode_backup),1);
-		GB_UpdateParam(PRM_ID_PASSIVECHN_CFG,&PasDecodeInfo_backup,sizeof(PasDecodeInfo_backup),1);
+		
+		if(DecordeMode.DecodeMode == SwitchDecode) // 主动解码
+		{
+			for(chn = 0; chn < GB_TOTAL_CHN; chn++)
+			{
+				if(DevModeCfg.ChnEnable[chn] == 1)
+				{
+					SN_MEMSET(&stNewSwitchChnInfo, 0, sizeof(stNewSwitchChnInfo));
+					if (ERROR == GetParameter(PRM_ID_SWITCHCHN_CFG, NULL, 
+						&stNewSwitchChnInfo, sizeof(PRM_SwitchChnInfo), chn+1, 
+						SUPER_USER_ID, NULL))
+					{
+						printf("%s line=%d GetParameter err\n", __FUNCTION__, __LINE__);
+						continue;
+					}
+					DevModeCfg.ChnEnable[chn] = 0;
+					stNewSwitchChnInfo.Enable = 1;
+					GB_UpdateParam(PRM_ID_SWITCHCHN_CFG,&stNewSwitchChnInfo,sizeof(stNewSwitchChnInfo),chn+1);
+				}
+			}
+			if(DevModeCfg.PollPlan == 1)
+			{
+				if (ERROR == GetParameter(PRM_ID_POLLSCH_PLAN, NULL, &pollsch_plan, sizeof(PRM_POLLSCH_PLAN), 1, 
+					SUPER_USER_ID, NULL))
+				{
+					printf("%s line=%d GetParameter PRM_ID_POLLSCH_PLAN err\n", __FUNCTION__, __LINE__);
+					return -1;
+				}
+
+				if(pollsch_plan.EnablePollPlan == 0)  //  多画面轮巡
+				{
+					DevModeCfg.PollPlan = 0;
+					pollsch_plan.EnablePollPlan = 1; //  打开多画面轮巡计划
+					GB_UpdateParam(PRM_ID_POLLSCH_PLAN,&pollsch_plan,sizeof(pollsch_plan),1);
+				}
+			}
+		}
+		else if(DecordeMode.DecodeMode == PassiveDecode) // 被动解码
+		{
+				
+		}
+		else
+		{
+			
+		}
+			
 	}
-
+	GB_UpdateParam(PRM_ID_GB_SIPD_DEVMODE_CFG,&DevModeCfg,sizeof(DevModeCfg),1);
 	return 0;
 }
 
@@ -403,6 +506,14 @@ static void *GB_Msg(void *data)
 		else
 		{
 			TRACE(SCI_TRACE_NORMAL,MOD_GB,"GB_Msg source:0x%x dest:0x%x  msg_id:0x%x\n",msg->source,msg->dest,msg->msgId);
+			pthread_mutex_lock(&gGBCfgLock);
+			if(gGBCfg.enable != 1) // 未进入国标模式，直接释放消息
+			{
+				FreeMessage(&msg);
+				pthread_mutex_unlock(&gGBCfgLock);
+				continue;
+			}
+			pthread_mutex_unlock(&gGBCfgLock);
 			switch (msg->msgId)
 			{
 				default:
@@ -460,10 +571,12 @@ static void GB_MsgHandle(SN_MSG *msg, GB_CONNECT_STATE *gb_cons)
 						GB_sipd_register(gb_cons, 1); // 不带认证的注销请求
 						gb_cons->last_sendtime = get_cur_time()/1000;
 						GB_Set_gGBConnStatus(0);
-
-						//  退出国标模式
-						GB_Change_Mode(0);
 					}		
+				}
+				break;
+				case PRM_ID_GB_SIPD_DEVMODE_CFG:
+				{
+					
 				}
 				break;
 				
@@ -503,10 +616,14 @@ static void GB_MsgHandle(SN_MSG *msg, GB_CONNECT_STATE *gb_cons)
 					close(gb_cons->connfd);
 					GB_ResetConState(gb_cons);
 				}
+
+				GB_Set_gGBConnStatus(0);
 			}
 
-			gb_ipchange = 1;
-			gb_ipchange_time = get_cur_time()/1000;
+				gb_ipchange = 1;
+				gb_ipchange_time = get_cur_time()/1000;
+				//  退出国标模式
+			
 		}
 		break;
 
@@ -621,13 +738,9 @@ static void* GB_Server(void *pParam)
 						GB_Refresh_GBCfg();
 						continue;
 					}
-
+					
 					//   进入国标模式
-//					ret = GB_Change_Mode(1);
-//					if(ret < 0)
-//					{
-//						continue;
-//					}
+
 					
 					if(gb_cfg.transfer_protocol == GB_TRANSFER_UDP) // UDP
 					{
@@ -878,8 +991,8 @@ int GB28181_InitParam(void)
 	}
 
 	GB_Refresh_GBCfg();
+	
 	gGBConnStatus = 0;
-	gGBMode=0;
 	
 	return 0;
 }
@@ -895,31 +1008,47 @@ int GB28181_init(void)
 		printf("GB28181_InitParam ERR! ret=%d\n",ret);
 		return -1;
 	}
-	
 	if((GBMsgQueue = CreatQueque(MOD_GB)) == -1)
 	{
 		printf("CreatQueque(MOD_GB) ERR\n");
 		return -1;
 	}
-
 	if(pthread_create(&msg_tid,NULL,GB_Msg,NULL)!=0)
 	{
 		printf("%s line=%d create GB_Msg thread failed \n", __FUNCTION__, __LINE__);
 		return -1;
 	}
 
+	if(gGBCfg.enable != 1)
+	{
+		printf("Not Enable GB28181 Mode!\n");
+		GB_Change_Mode(0);
+		return 0;
+	}
+	else
+	{
+		ret = GB_Change_Mode(1);
+		if(ret < 0)
+		{
+			printf("Enter GB28181 Mode Failed!\n");
+			return 0;
+		}
+	}
+	
+
+
 	if(pthread_create(&protocol_tid,NULL,GB_Server,NULL)!=0)
 	{
 		printf("%s line=%d create GB_Server thread failed \n", __FUNCTION__, __LINE__);
 		return -1;
 	}
-
+	
 	if(pthread_create(&data_send_tid,NULL,GB_DecodePSData,NULL) != 0)
 	{
-		printf("%s line=%d create GB_Server thread failed \n", __FUNCTION__, __LINE__);
+		printf("%s line=%d create GB_DecodePSData thread failed \n", __FUNCTION__, __LINE__);
 		return -1;
 	}
-	
+
 	return 0;
 }
 

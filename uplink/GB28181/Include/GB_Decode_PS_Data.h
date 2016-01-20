@@ -870,12 +870,6 @@ typedef struct MpegDemuxContext {
 #endif
 } MpegDemuxContext;
 
-typedef struct 
-{
-	struct pollfd *poll_entry;
-	int server_fd;
-	int client_fd;
-}GBMsgSock;
 
 
 /*SIP_Context:记录一个会话的变量状态*/
