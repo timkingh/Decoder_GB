@@ -875,6 +875,7 @@ typedef struct MpegDemuxContext {
 /*SIP_Context:记录一个会话的变量状态*/
 struct SIP_Context
 {
+	int chn; /*从0开始*/
 	enum GB_RTSPState state;
 	int sip_video_fd;  /*在本地端口不为零时创建一个socket用于接收数据*/
 	int send_ps_fd;  /*取出RTP头后,用于发送PS流的socket*/
@@ -900,9 +901,9 @@ struct SIP_Context
 	short streamTypeBit; /* 0 - 视频 ; 1 - 音频*/
 	int code_id;
 	unsigned long long DataCount;/*传递给预览模块的帧序号*/
+	int tmpSeq; /*用于判断是否丢包*/
 
-	char chn; //通道号, 从1开始, 等于SIP消息线程发送过来的chn+1
-    char session_id[MAX_GB_SIPD_SDP_SIZE];  /*会话ID,会话唯一性的标识*/
+	char session_id[MAX_GB_SIPD_SDP_SIZE];  /*会话ID,会话唯一性的标识*/
 };
 
 

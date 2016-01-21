@@ -75,8 +75,6 @@ typedef struct SIP_Context SIP_Context;
 /*用于RTP数据包解码*/
 typedef struct
 {
-    //AVFormatContext *ic;
-    //AVStream *st;
 	SIP_Context * pSipContext; /*指向会话的指针*/
 	short isFirst; /*用于记录RTP负载类型*/
 	

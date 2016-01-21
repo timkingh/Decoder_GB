@@ -412,15 +412,16 @@ int GB_Change_Mode(int Flag)
 			}
 
 			LayoutReq.mode = SingleScene;
+			LayoutReq.flag = 1; /*国标模式下,切换为被动解码*/
 			SendMessageEx(SUPER_USER_ID, MOD_GB, MOD_SCM, 0, 0, MSG_ID_PRV_LAYOUT_CTRL_REQ, &LayoutReq, sizeof(Layout_crtl_Req));
+			printf("%s Line %d ---------> here\n",__func__,__LINE__);
 		}
 		else if(DecordeMode.DecodeMode == PassiveDecode) // 被动解码
 		{
 			int layout_mode;
 
 			//  断开通道连接
-
-			
+		
 			layout_mode = 1; // 被动解码下的单画面;
 			SendMessageEx (SUPER_USER_ID, MOD_GB, MOD_SCM, 0, 0, MSG_ID_SCM_PAS_LAYOUT_IND, &layout_mode, sizeof(layout_mode));
 		}

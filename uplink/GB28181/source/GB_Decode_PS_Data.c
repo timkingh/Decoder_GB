@@ -22,10 +22,7 @@
 
 
 /*module*/
-//#include "type_def.h"
-//#include "rtsp_cmn.h"
-//#include "rtsp.h"
-//#include "codec.h"
+
 #include <netinet/tcp.h>
 
 #include "GB_Decode_PS_Data.h"
@@ -44,17 +41,16 @@
 #define GB_SEG_SIZE	1.5*1024*1024
 #define GB_MSG_LEN	20
 #define UDP_BUF_LEN 65535
-//#define RTP_REORDER_QUEUE_DEFAULT_SIZE 10  /*RTP包重排队列的长度*/
-//#define RTP_MIN_PACKET_LENGTH 12
-//#define RTP_MAX_PACKET_LENGTH 8192
 #define RECVBUF_SIZE 10*RTP_MAX_PACKET_LENGTH
 
 
-
-
 static SIP_Context *g_sipClient[MAX_DECODE_CLIENT_NUM];
-//static char pes_recv_buf[RECVBUF_SIZE];
+static int isGBMode = 0;
 
+int GB_Get_GBMode(void)
+{
+	return isGBMode;
+}
 
 
 // 创建接收视音频流的socket，并绑定ip和端口
@@ -146,6 +142,7 @@ static int Init_SipContext(SIP_Context * c)
 {
 	if(c)
 	{
+		c->chn = -1;
 		c->state = GB_RTSP_INVALID;
 		c->sip_video_fd = -1;
 		c->send_ps_fd = -1;
@@ -154,8 +151,15 @@ static int Init_SipContext(SIP_Context * c)
 		c->poll_entry = NULL;
 		c->poll_entry_stream = NULL;
 
-		c->recv_buf_size = RECVBUF_SIZE;
-		c->recv_buffer = NULL;
+		c->recv_buf_size = RECVBUF_SIZE;	
+		c->recv_buffer = SN_MALLOC(c->recv_buf_size); /*后续补充: 会话结束时要释放内存*/
+		if(c->recv_buffer == NULL)
+		{
+			printf("SN_MALLOC for recv_buffer ERROR!\n");
+			return -1;
+		}
+		
+		SN_MEMSET(c->recv_buffer, 0, c->recv_buf_size);
 		c->recv_buffer_ptr = c->recv_buffer;
 		c->recv_buffer_end = c->recv_buffer;
 
@@ -169,6 +173,7 @@ static int Init_SipContext(SIP_Context * c)
 		c->streamTypeBit = -1;
 		c->code_id = CODEC_ID_INVALID;
 		c->DataCount = 0;
+		c->tmpSeq = 0;
 
 		c->rtpDemuxContext = SN_MALLOC(sizeof(RTPDemuxContext));
 		if(!c->rtpDemuxContext)
@@ -177,7 +182,7 @@ static int Init_SipContext(SIP_Context * c)
 			return -1;			
 		}
 
-		c->rtpDemuxContext->queue = NULL; /*SN_MALLOC(sizeof(RTPPacket))*/ /*初始化时,重排队列里没有RTP包*/
+		c->rtpDemuxContext->queue = NULL; /*初始化时,重排队列里没有RTP包*/
 		c->rtpDemuxContext->seq = 0;
 		c->rtpDemuxContext->queue = NULL;
 		c->rtpDemuxContext->queue_len = 0;
@@ -193,8 +198,8 @@ static int Init_SipContext(SIP_Context * c)
 }
 
 
-int tmpLen = 0;
-int tmpSeq = 0;
+//int tmpLen = 0;
+//int tmpSeq = 0;
 /*接收RTP数据,并解析得到PS流*/
 static int GB_Recv_Rtp_Data(SIP_Context * c)
 {
@@ -202,17 +207,6 @@ static int GB_Recv_Rtp_Data(SIP_Context * c)
 	int ret = -1;	
 	struct sockaddr_in addr;
 	socklen_t addr_len = sizeof(struct sockaddr_in); 
-	
-	if(NULL == c->recv_buffer)
-	{
-		c->recv_buffer = SN_MALLOC(c->recv_buf_size); /*后续补充: 会话结束时要释放内存*/
-		if(c->recv_buffer == NULL)
-		{
-			printf("SN_MALLOC for recv_buffer ERROR!\n");
-			return -1;
-		}
-		SN_MEMSET(c->recv_buffer, 0, c->recv_buf_size);
-	}
 
 	len = recvfrom(c->sip_video_fd,c->recv_buffer,c->recv_buf_size,0,(struct sockaddr *)&addr, &addr_len);
 	if(len < 0)
@@ -228,22 +222,22 @@ static int GB_Recv_Rtp_Data(SIP_Context * c)
 	}
 	c->recv_buffer_end = c->recv_buffer + len; 
 
-	if(tmpLen < 5*1024*1024)
+	//if(tmpLen < 5*1024*1024)
 	{		
-		if(AV_RB16(c->recv_buffer + 2) > tmpSeq + 1)
+		if(AV_RB16(c->recv_buffer + 2) > c->tmpSeq + 1)
 		{
 			printf("missed some packet!!!\n");
 			printf("%s Line %d ======> recv %d Bytes,cur_seq:%d,last_seq:%d\n\n",__func__,__LINE__,
-										len,AV_RB16(c->recv_buffer + 2),tmpSeq);
+										len,AV_RB16(c->recv_buffer + 2),c->tmpSeq);
 		}
 		
-		tmpSeq = AV_RB16(c->recv_buffer + 2);
+		c->tmpSeq = AV_RB16(c->recv_buffer + 2);
 		
 		ret = ff_rtp_parse_packet(c->rtpDemuxContext,&c->recv_buffer, len);
 		if(ret < 0)
 		{
 		}
-		tmpLen += len;
+		//tmpLen += len;
 	}	
 
 	return 0;
@@ -270,13 +264,58 @@ static int GB_Create_Msg_Socket(void)
 	return 0;
 }
 
+static int GB_Close_Session(SIP_Context * c)
+{
+	if(c)
+	{
+		c->state = GB_RTSP_INVALID;
+		if(c->sip_video_fd > 0)
+			close(c->sip_video_fd);		
+		c->sip_video_fd = -1;
+
+	
+		c->poll_entry = NULL;
+		c->recv_buf_size = 0;
+
+		if(c->recv_buffer)
+			SN_FREE(c->recv_buffer);
+		c->recv_buffer = NULL;
+		
+		c->recv_buffer_ptr = c->recv_buffer;
+		c->recv_buffer_end = c->recv_buffer;
+
+		c->ps_data_length = 0;
+		c->pes_packet_length = 0;
+		c->pes_bytes_have_read = 0;
+		c->isMissedPacket = 0;
+
+		c->fPacketReadInProgress = NULL;
+		c->fPacketSentToDecoder = NULL;
+		c->streamTypeBit = -1;
+		c->code_id = CODEC_ID_INVALID;
+		c->DataCount = 0;
+		c->tmpSeq = 0;
+
+		if(c->rtpDemuxContext)
+			SN_FREE(c->rtpDemuxContext);
+		c->rtpDemuxContext = NULL;
+
+		if(c->mpegDemuxContext)
+			SN_FREE(c->mpegDemuxContext);
+		c->mpegDemuxContext = NULL;	
+
+		printf("%s Line %d,close the session(%p)!\n",__func__,__LINE__,c);
+	}
+
+	return 0;
+}
 
 
-void GB_Handle_Local_Msg(void)
+static void GB_Handle_Local_Msg(void)
 {
 	GB_media_session* media_session = NULL;
 	char sock_buf[GB_IOBUFFER_SIZE];
-	int chn = -1;
+	int chn = -1,ret = -1;
 	int readlen = 0;
 	
 	if(gb_msg_sock.poll_entry->revents & POLLIN)
@@ -290,43 +329,48 @@ void GB_Handle_Local_Msg(void)
 			media_session = (GB_media_session*)sock_buf;	
 			chn = media_session->chn;
 
-			if(media_session->media_session_opt == MEDIA_SESSION_OPT_INVITE)
+			if(media_session->media_session_opt == MEDIA_SESSION_OPT_INVITE &&
+					g_sipClient[chn]->state != GB_RTSP_PLAYING)
 			{
+				RTSP_C_SDPInfo sdpInfo;
 				SCM_Link_Rsp addrsp;	  	
 		  		addrsp.endtype = LINK_ALL_SUCCESS;
-				addrsp.mode = 1/*modeNum*/;  /*暂时写为1*/							
+				addrsp.mode = 1/*modeNum*/;  /*暂时写为1*/	
+
+				SN_MEMSET(&sdpInfo,0,sizeof(RTSP_C_SDPInfo));
+				sdpInfo.vdoType = 96;
+
+				ret = Init_SipContext(g_sipClient[chn]);
+				if(ret < 0)
+				{
+					TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s:%d: Init_SipContext failed\n", __func__, __LINE__);
+					return;
+				}
+		
+				ret = GB_Create_Data_Socket(g_sipClient[chn],LISTEN_PORT + chn*10);
+				if(ret < 0)
+				{
+					TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s:%d: GB_Create_Data_Socket failed\n", __func__, __LINE__);
+					return;
+				}
+				g_sipClient[chn]->chn = chn;
+				g_sipClient[chn]->state = GB_RTSP_PLAYING;
 
 				/*单画面主码流预览: channel==RTSP_C_MAX_Q_NUM*/
 				addrsp.channel = RTSP_C_MAX_Q_NUM;
 		  		SN_SendMessageEx(SUPER_USER_ID, MOD_GB, MOD_FWK, 0, 0, MSG_ID_NTRANS_ADDUSER_RSP,
 														&addrsp, sizeof(SCM_Link_Rsp));
 
-				g_sipClient[chn]->state = GB_RTSP_PLAYING;
-
 				printf("%s Line %d -------> channel:%d, MSG_ID_NTRANS_ADDUSER_RSP has been sent!\n",
 												__func__,__LINE__,addrsp.channel);
+
+				GB_Set_Media_Param(chn,&sdpInfo);
 			}
 			else if(media_session->media_session_opt == MEDIA_SESSION_OPT_BYE)
 			{
 				g_sipClient[chn]->state = GB_RTSP_STOP;
-				//gb_close_session(c);
+				GB_Close_Session(g_sipClient[chn]);
 			}
-
-			#if 0
-			if(media_session->chn == GB_TOTAL_CHN + 1
-					&& media_session->media_session_opt == MEDIA_SESSION_OPT_BYE)  //注销所有通道
-			{
-				TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s:%d:The GB/T28181 is not enabled!\n", __func__,__LINE__);
-				for(c=first_sip; c!=NULL; c=c->sip_next) 
-				{
-					if(c->sip_link_state != GB_SIP_STATE_NO_INIT)
-					{
-						//gb_close_session(c);
-					}
-				}
-				return;
-			}
-			#endif
 		} while(readlen > 0);
 	}
 
@@ -355,7 +399,6 @@ void* GB_DecodePSData(void *Param)
 		return NULL;
 	}
 
-
 	for(idx = 0;idx < MAX_DECODE_CLIENT_NUM;idx++)
 	{
 		g_sipClient[idx] = SN_MALLOC(sizeof(SIP_Context));
@@ -364,22 +407,12 @@ void* GB_DecodePSData(void *Param)
 			TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s:%d: Malloc failed\n", __func__, __LINE__);
 			return NULL;
 		}
-		
-		ret = Init_SipContext(g_sipClient[idx]);
-		if(ret < 0)
-		{
-			TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s:%d: Init_SipContext failed\n", __func__, __LINE__);
-			return NULL;
-		}
-		
-		ret = GB_Create_Data_Socket(g_sipClient[idx],LISTEN_PORT + idx*10);
-		if(ret < 0)
-		{
-			TRACE(SCI_TRACE_NORMAL, MOD_GB, "%s:%d: GB_Create_Data_Socket failed\n", __func__, __LINE__);
-			return NULL;
-		}
-	}
 
+		g_sipClient[idx]->state = GB_RTSP_INVALID;
+	}
+	
+	isGBMode = 1; /*开启国标模式*/
+	
 	while(1)
 	{
 		delay = 1000;	
@@ -416,7 +449,7 @@ void* GB_DecodePSData(void *Param)
 				/*接收RTP数据*/
 				if(GB_Recv_Rtp_Data(g_sipClient[idx]) != 0) 
 				{
-					//gb_close_connection(p_rtp->rtsp_c); 
+					//GB_Close_Session(g_sipClient[idx]); 
 				}
 			}
 		}

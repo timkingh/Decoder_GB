@@ -766,7 +766,6 @@ static int GB_Parse_NALU_Type(AVPacket* packet)
 
 static int GB_Buffer_Write(AVPacket* packet)
 {
-	//printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
 	AVPacket * tlist = packet;
 	AVPacket * dp= NULL;
 	AVPacket * ptem= NULL;
@@ -832,7 +831,7 @@ static int GB_Add_Packet_Into_List(SIP_Context *s)
 
 	if(bPacket == NULL)
 	{
-		printf("%s Line %d ---------> here!!!\n",__func__,__LINE__);
+		TRACE(SCI_TRACE_NORMAL, MOD_GB,"%s Line %d ---------> start to store packet!!!\n",__func__,__LINE__);
 		s->fPacketSentToDecoder = s->fPacketReadInProgress;
 	}
 	else
@@ -850,7 +849,6 @@ static int GB_Add_Packet_Into_List(SIP_Context *s)
 
 		if(isExistIframeOrPframe && s->fPacketReadInProgress->naluType != 2)
 		{
-			//printf("\n\n%s Line %d ---------> here!!!\n",__func__,__LINE__);
 			s->DataCount++;
 			s->fPacketSentToDecoder->seqno = s->DataCount;
 			
@@ -1053,7 +1051,6 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			if(tempPacket != NULL)
 			{
 				SN_MEMSET(tempPacket,0,sizeof(AVPacket));
-				//tempPacket->codec_id = CODEC_ID_H264;//初始化变量	
 				tempPacket->BufOffset = sizeof(AVPacket);
 				tempPacket->BufRead = 0;
 				tempPacket->rtpOffset = 0;
@@ -1105,6 +1102,8 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 			/*解析Packet的帧类型，并将数据偏移指针指向ES流的第一个字节(跳过NALU起始码0x00 00 00 01)*/
 			GB_Parse_NALU_Type(s->fPacketReadInProgress);
 
+			/*时间戳管理*/
+			s->fPacketReadInProgress->pts = (unsigned long long)s->rtpDemuxContext->timestamp;
 			if(s->fPacketReadInProgress->naluType == 0x09)
 			{
 				GB_AVPacket_Free(s->fPacketReadInProgress);
@@ -1116,11 +1115,10 @@ static int GB_Store_Packet(SIP_Context *s,int DataReadLen)
 				/*根据NALU类型决定是否将数据写入数据链表*/				
 				GB_Add_Packet_Into_List(s);
 			}
-			//GB_AVPacket_Free(s->fPacketReadInProgress);						
 		}
 		s->fPacketReadInProgress = NULL;
 		
-		printf("%s Line %d: have read a complete PES packet(%d Bytes)!\n\n",
+		TRACE(SCI_TRACE_NORMAL, MOD_GB,"%s Line %d: have read a complete PES packet(%d Bytes)!\n\n",
 										__func__,__LINE__,s->pes_bytes_have_read);
 		s->pes_bytes_have_read = 0;
 	}

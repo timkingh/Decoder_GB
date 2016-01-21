@@ -74,6 +74,7 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, /*AVPacket *pkt,*/
     ssrc      = AV_RB32(buf + 8);
     /* store the ssrc in the RTPDemuxContext */
     s->ssrc = ssrc;
+	s->timestamp = timestamp;
 
 	if(s->isFirst)
 	{
